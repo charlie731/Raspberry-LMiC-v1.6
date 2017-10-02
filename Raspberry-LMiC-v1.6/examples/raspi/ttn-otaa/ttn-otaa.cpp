@@ -1,32 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015 Thomas Telkamp and Matthijs Kooijman
- *
- * Permission is hereby granted, free of charge, to anyone
- * obtaining a copy of this document and accompanying files,
- * to do whatever they want with them without any restriction,
- * including, but not limited to, copying, modification and redistribution.
- * NO WARRANTY OF ANY KIND IS PROVIDED.
- *
- * This example sends a valid LoRaWAN packet with payload "Hello,
- * world!", using frequency and encryption settings matching those of
- * the The Things Network.
- *
- * This uses OTAA (Over-the-air activation), where where a DevEUI and
- * application key is configured, which are used in an over-the-air
- * activation procedure where a DevAddr and session keys are
- * assigned/generated for use with all further communication.
- *
- * Note: LoRaWAN per sub-band duty-cycle limitation is enforced (1% in
- * g1, 0.1% in g2), but not the TTN fair usage policy (which is probably
- * violated by this sketch when left running for longer)!
-
- * To use this sketch, first register your application and device with
- * the things network, to set or generate an AppEUI, DevEUI and AppKey.
- * Multiple devices can use the same AppEUI, but each device has its own
- * DevEUI and AppKey.
- *
- * Do not forget to define the radio type correctly in config.h.
- *
+Adaptado Charlie "Vasco" OTAA
  *******************************************************************************/
 
 #include <stdio.h>
@@ -41,62 +14,51 @@
 
 // first. When copying an EUI from ttnctl output, this means to reverse
 // the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,0x70.
-static const u1_t PROGMEM APPEUI[8]={ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const u1_t PROGMEM APPEUI[8]={ 0x00, 0x46, 0x00, 0xF0, 0x7E, 0xD5, 0x00, 0x00 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
 // This should also be in little endian format, see above.
-static const u1_t PROGMEM DEVEUI[8]={ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const u1_t PROGMEM DEVEUI[8]={ 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 // Here on Raspi we use part of MAC Address do define devEUI so 
 // This one above is not used, but you can still old method 
 // reverting the comments on the 2 following line
 //void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
-void os_getDevEui (u1_t* buf) { getDevEuiFromMac(buf); }
+void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);} //{ getDevEuiFromMac(buf); }
 
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
 // practice, a key taken from ttnctl can be copied as-is.
 // The key shown here is the semtech default key.
-static const u1_t PROGMEM APPKEY[16] = { 0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C };
+static const u1_t PROGMEM APPKEY[16] = { 0x00, 0x00, 0x4F, 0x00, 0xCA, 0x43, 0x28, 0xE9, 0x33, 0x80, 0x8E, 0x9C, 0x33, 0x20, 0x61, 0x1C };
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
-static uint8_t mydata[] = "Raspi LMIC!";
+static uint8_t mydata[] = "Vamos Colega!!!";
 static osjob_t sendjob;
+
+ u4_t netid = 0;
+ devaddr_t devaddr = 0;
+ u1_t nwkKey [16];
+ u1_t artKey [16];
 
 // Schedule TX every this many seconds (might become longer due to duty)
 // cycle limitations).
-const unsigned TX_INTERVAL = 120;
+const unsigned TX_INTERVAL = 15;
 
 //Flag for Ctrl-C
 volatile sig_atomic_t force_exit = 0;
 
-// LoRasPi board 
-// see https://github.com/hallard/LoRasPI
-//#define RF_LED_PIN RPI_V2_GPIO_P1_16 // Led on GPIO23 so P1 connector pin #16
-//#define RF_CS_PIN  RPI_V2_GPIO_P1_24 // Slave Select on CE0 so P1 connector pin #24
+//#define RF_LED_PIN RPI_V2_GPIO_P1_07 // Led on GPIO4 so P1 connector pin #7
+#define RF_CS_PIN  RPI_V2_GPIO_P1_26 // Slave Select on CE0 so P1 connector pin #24
 //#define RF_IRQ_PIN RPI_V2_GPIO_P1_22 // IRQ on GPIO25 so P1 connector pin #22
-//#define RF_RST_PIN RPI_V2_GPIO_P1_15 // RST on GPIO22 so P1 connector pin #15
+#define RF_RST_PIN RPI_V2_GPIO_P1_29// Reset on GPIO5 so P1 connector pin #29
 
-// Raspberri PI Lora Gateway for multiple modules 
-// see https://github.com/hallard/RPI-Lora-Gateway
-// Module 1 on board RFM95 868 MHz (example)
-#define RF_LED_PIN RPI_V2_GPIO_P1_07 // Led on GPIO4 so P1 connector pin #7
-#define RF_CS_PIN  RPI_V2_GPIO_P1_24 // Slave Select on CE0 so P1 connector pin #24
-#define RF_IRQ_PIN RPI_V2_GPIO_P1_22 // IRQ on GPIO25 so P1 connector pin #22
-#define RF_RST_PIN RPI_V2_GPIO_P1_29 // Reset on GPIO5 so P1 connector pin #29
-
-
-// Dragino Raspberry PI hat (no onboard led)
-// see https://github.com/dragino/Lora
-//#define RF_CS_PIN  RPI_V2_GPIO_P1_22 // Slave Select on GPIO25 so P1 connector pin #22
-//#define RF_IRQ_PIN RPI_V2_GPIO_P1_07 // IRQ on GPIO4 so P1 connector pin #7
-//#define RF_RST_PIN RPI_V2_GPIO_P1_11 // Reset on GPIO17 so P1 connector pin #11
 
 // Pin mapping
 const lmic_pinmap lmic_pins = { 
     .nss  = RF_CS_PIN,
     .rxtx = LMIC_UNUSED_PIN,
     .rst  = RF_RST_PIN,
-    .dio  = {LMIC_UNUSED_PIN, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN},
+    .dio  = {4, 20, 21},
 };
 
 #ifndef RF_LED_PIN
@@ -114,7 +76,7 @@ void do_send(osjob_t* j) {
     } else {
         digitalWrite(RF_LED_PIN, HIGH);
         // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 1);
         printf("Packet queued\n");
     }
     // Next TX is scheduled after TX_COMPLETE event.
@@ -143,10 +105,29 @@ void onEvent (ev_t ev) {
         break;
         case EV_JOINED:
             printf("EV_JOINED\n");
-            digitalWrite(RF_LED_PIN, LOW);
-            // Disable link check validation (automatically enabled
-            // during join, but not supported by TTN at this time).
-            LMIC_setLinkCheckMode(0);
+           
+            LMIC_getSessionKeys (&netid, &devaddr, nwkKey, artKey);
+            
+            printf ("netid:%d ",netid);
+            printf ("\n");
+            printf ("devaddr:%X",devaddr);
+            printf ("\n");
+            printf ("artKey:");
+            for (int i = 0; i <sizeof (artKey); ++ i)
+            {
+              printf ("%X",artKey[i]);
+            }
+            
+            printf ("\n");
+            
+            printf ("nwkKey:");
+            for (int i = 0; i <sizeof (nwkKey); ++ i)
+            {
+              printf ("%X",nwkKey[i]);
+            }
+            
+            printf ("\n");
+           
         break;
         case EV_RFU1:
             printf("EV_RFU1\n");
@@ -158,13 +139,44 @@ void onEvent (ev_t ev) {
             printf("EV_REJOIN_FAILED\n");
         break;
         case EV_TXCOMPLETE:
-            printf("EV_TXCOMPLETE (includes waiting for RX windows)\n");
+              printf("EV_TXCOMPLETE (includes waiting for RX windows)");
+
             if (LMIC.txrxFlags & TXRX_ACK)
-              printf("%s Received ack\n", strTime);
-            if (LMIC.dataLen) {
-              printf("%s Received %d bytes of payload\n", strTime, LMIC.dataLen);
-            }
-            digitalWrite(RF_LED_PIN, LOW);
+               {
+               printf("Frequencia ACK");
+               printf("Frecuencia ACK %ld \n",LMIC.freq);
+			   printf("Canal Transmision ACK \n");
+               printf("Channel ACK%ld\n",LMIC.txChnl);
+
+                 printf("Received ack \n");
+               }
+		    
+            if (LMIC.dataLen)
+              {
+                printf("Received\n ");
+                printf("LMIC.datalen %ld\n",LMIC.dataLen);
+                printf(" bytes of payload\n\n");
+
+                printf("Frequencia Recepcion: ");
+                printf("Frecuencia  %ld \n",LMIC.freq);
+			    printf("Canal Recepcion: ");
+                printf("Channel %ld\n",LMIC.txChnl);
+
+                uint8_t downlink[LMIC.dataLen];
+                memcpy(&downlink,&(LMIC.frame+LMIC.dataBeg)[0],LMIC.dataLen);
+                // Turn on LED if we get the magic number
+                // digitalWrite(13, downlink[0] == 42);
+                printf("Data Received\n ");
+                printf("LMIC: ");
+
+                for (int x=LMIC.dataBeg; x<(LMIC.dataBeg + LMIC.dataLen);x++)
+                {
+                   printf("%c",LMIC.frame[x]);
+                   //printf(" ");
+                }
+                printf("\n");
+              }
+
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
         break;
@@ -190,72 +202,44 @@ void onEvent (ev_t ev) {
     }
 }
 
-/* ======================================================================
-Function: sig_handler
-Purpose : Intercept CTRL-C keyboard to close application
-Input   : signal received
-Output  : -
-Comments: -
-====================================================================== */
-void sig_handler(int sig)
+void setup() 
 {
-  printf("\nBreak received, exiting!\n");
-  force_exit=true;
-}
-
-/* ======================================================================
-Function: main
-Purpose : not sure ;)
-Input   : command line parameters
-Output  : -
-Comments: -
-====================================================================== */
-int main(void) 
-{
-    // caught CTRL-C to do clean-up
-    signal(SIGINT, sig_handler);
     
-    printf("%s Starting\n", __BASEFILE__);
-    
-      // Init GPIO bcm
-    if (!bcm2835_init()) {
-        fprintf( stderr, "bcm2835_init() Failed\n\n" );
-        return 1;
-    }
-
-	// Show board config
-    printConfig(RF_LED_PIN);
-    printKeys();
-
-    // Light off on board LED
-    pinMode(RF_LED_PIN, OUTPUT);
-    digitalWrite(RF_LED_PIN, HIGH);
+    bcm2835_init();
+     
 
     // LMIC init
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
-
-    // Start job (sending automatically starts OTAA too)
-    do_send(&sendjob);
-
-    while(!force_exit) {
-      os_runloop_once();
-      
-      // We're on a multitasking OS let some time for others
-      // Without this one CPU is 99% and with this one just 3%
-      // On a Raspberry PI 3
-      usleep(1000);
-    }
-
-    // We're here because we need to exit, do it clean
-
-    // Light off on board LED
-    digitalWrite(RF_LED_PIN, LOW);
     
-    // module CS line High
-    digitalWrite(lmic_pins.nss, HIGH);
-    printf( "\n%s, done my job!\n", __BASEFILE__ );
-    bcm2835_close();
-    return 0;
+    //LMIC_setSession (0x1, DEVADDR, (u1_t*)DEVKEY, (u1_t*)ARTKEY);
+  
+	LMIC_selectSubBand(7);
+  
+	// Disable data rate adaptation
+	LMIC_setAdrMode(0);
+	// Disable link check validation
+	LMIC_setLinkCheckMode(0);
+	
+	
+	// Start job (sending automatically starts OTAA too)
+    do_send(&sendjob);
 }
+
+void loop() 
+{
+      os_runloop_once();
+ 
+      usleep(1000);
+}
+
+int main() {
+  setup();
+
+  while (1) {
+    loop();
+  }
+  return 0;
+}
+
