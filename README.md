@@ -1,5 +1,5 @@
 
-Trabaja en US-BAND 902-928 Mhz
+Trabaja en US902-928 Mhz y EU863-870. BANDS
 
 Supports SX1272/SX1276 and HopeRF RFM92/RFM95 tranceivers
 
