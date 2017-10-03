@@ -23,7 +23,7 @@ static const u1_t PROGMEM DEVEUI[8]={ 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 // This one above is not used, but you can still old method 
 // reverting the comments on the 2 following line
 //void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
-void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);} //{ getDevEuiFromMac(buf); }
+void os_getDevEui (u1_t* buf) { getDevEuiFromMac(buf); } // Valor numerico de la Mac Interna, ¡Si, quieres!
 
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
